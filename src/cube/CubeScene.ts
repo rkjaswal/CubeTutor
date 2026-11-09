@@ -32,6 +32,13 @@ const CUBIE = 0.94;
 const STICKER = 0.76;
 const STICKER_LIFT = CUBIE / 2 + 0.012;
 const QUARTER = Math.PI / 2;
+const PHI_LIMIT = 0.2;
+const VIEW_TURN_MS = 320;
+// Pitch stops sit near the starting view, then far enough over and under
+// the cube that the top and bottom faces read clearly.
+const PITCH_STOPS = [0.42, 1.05, Math.PI - 0.42];
+
+export type CubeOrbit = 'cw' | 'ccw' | 'up' | 'down';
 
 type Queued = { move: Move; record: boolean; duration: number };
 
@@ -150,6 +157,9 @@ export class CubeScene {
   private lastY = 0;
   private theta = 0.62;
   private phi = 1.02;
+  private viewQueue: CubeOrbit[] = [];
+  private viewToken = 0;
+  private viewPlaying = false;
 
   constructor(
     private readonly gl: ExpoWebGLRenderingContext,
@@ -180,6 +190,7 @@ export class CubeScene {
   }
 
   pointerDown(x: number, y: number) {
+    this.interruptView();
     this.lastX = x;
     this.lastY = y;
     if (this.animating || this.queue.length > 0) {
@@ -202,6 +213,7 @@ export class CubeScene {
   }
 
   beginOrbit(x: number, y: number) {
+    this.interruptView();
     this.lastX = x;
     this.lastY = y;
     if (this.drag?.type === 'turn') return;
@@ -216,7 +228,7 @@ export class CubeScene {
       const dx = x - this.lastX;
       const dy = y - this.lastY;
       this.theta -= dx * 0.008;
-      this.phi = Math.min(Math.PI - 0.2, Math.max(0.2, this.phi + dy * 0.008));
+      this.phi = this.clampPhi(this.phi + dy * 0.008);
       this.updateCamera();
     } else if (drag.type === 'pending') {
       if (Math.hypot(x - drag.x, y - drag.y) >= 12) {
@@ -312,6 +324,12 @@ export class CubeScene {
     this.enqueue(parseMove(token), true, 180);
   }
 
+  orbit(direction: CubeOrbit) {
+    if (this.viewQueue.length >= 12) this.viewQueue.shift();
+    this.viewQueue.push(direction);
+    this.pumpView();
+  }
+
   dispose() {
     this.disposed = true;
     this.tweenId += 1;
@@ -322,6 +340,74 @@ export class CubeScene {
     this.ringGeometry.dispose();
     for (const material of this.materials) material.dispose();
     this.renderer.dispose();
+  }
+
+  private interruptView() {
+    this.viewToken += 1;
+    this.viewPlaying = false;
+    this.viewQueue = [];
+  }
+
+  private pumpView() {
+    if (this.viewPlaying || this.disposed) return;
+    const direction = this.viewQueue.shift();
+    if (!direction) return;
+
+    const fromTheta = this.theta;
+    const fromPhi = this.phi;
+    let toTheta = fromTheta;
+    let toPhi = fromPhi;
+    // Increasing theta brings the right face forward, so the top turns clockwise.
+    // Up raises the camera toward the top face; down lowers it toward the bottom.
+    if (direction === 'cw') toTheta += QUARTER;
+    else if (direction === 'ccw') toTheta -= QUARTER;
+    else toPhi = this.stepPitch(fromPhi, direction);
+
+    if (Math.abs(toTheta - fromTheta) < 1e-4 && Math.abs(toPhi - fromPhi) < 1e-4) {
+      this.pumpView();
+      return;
+    }
+
+    const travel = Math.max(Math.abs(toTheta - fromTheta), Math.abs(toPhi - fromPhi));
+    const duration = Math.min(520, Math.max(240, (travel / QUARTER) * VIEW_TURN_MS));
+    this.viewPlaying = true;
+    const token = ++this.viewToken;
+    const start = Date.now();
+    const step = () => {
+      if (this.disposed || token !== this.viewToken) return;
+      const t = Math.min(1, (Date.now() - start) / duration);
+      const eased = 1 - (1 - t) ** 3;
+      this.theta = fromTheta + (toTheta - fromTheta) * eased;
+      this.phi = fromPhi + (toPhi - fromPhi) * eased;
+      this.updateCamera();
+      if (t < 1) {
+        requestAnimationFrame(step);
+        return;
+      }
+      this.theta = toTheta;
+      this.phi = toPhi;
+      this.updateCamera();
+      this.viewPlaying = false;
+      this.pumpView();
+    };
+    step();
+  }
+
+  private stepPitch(phi: number, direction: 'up' | 'down') {
+    if (direction === 'up') {
+      for (let index = PITCH_STOPS.length - 1; index >= 0; index -= 1) {
+        if (PITCH_STOPS[index] < phi - 0.08) return PITCH_STOPS[index];
+      }
+      return PHI_LIMIT;
+    }
+    for (const stop of PITCH_STOPS) {
+      if (stop > phi + 0.08) return stop;
+    }
+    return Math.PI - PHI_LIMIT;
+  }
+
+  private clampPhi(phi: number) {
+    return Math.min(Math.PI - PHI_LIMIT, Math.max(PHI_LIMIT, phi));
   }
 
   private enqueue(move: Move, record: boolean, duration: number) {

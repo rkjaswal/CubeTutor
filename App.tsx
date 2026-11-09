@@ -6,7 +6,14 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import { FACE_COLOR, type Face } from './src/cube/model';
 import { CubeView, type CubeHandle } from './src/components/CubeView';
-import { FACE_PAD, type CubeStatus } from './src/cube/CubeScene';
+import { FACE_PAD, type CubeOrbit, type CubeStatus } from './src/cube/CubeScene';
+
+const VIEW_PAD: { direction: CubeOrbit; glyph: string; caption: string; label: string }[] = [
+  { direction: 'cw', glyph: '↻', caption: 'Clockwise', label: 'Rotate the cube clockwise' },
+  { direction: 'ccw', glyph: '↺', caption: 'Anticlockwise', label: 'Rotate the cube anticlockwise' },
+  { direction: 'up', glyph: '↑', caption: 'Up', label: 'Rotate the cube up' },
+  { direction: 'down', glyph: '↓', caption: 'Down', label: 'Rotate the cube down' },
+];
 
 const INITIAL_STATUS: CubeStatus = {
   solveMoves: 0,
@@ -122,7 +129,7 @@ function CubeTutor() {
         ) : null}
       </View>
 
-      <Text style={styles.hint}>Drag a face to turn a layer. Drag empty space to orbit.</Text>
+      <Text style={styles.hint}>Drag a face to turn a layer. Drag empty space or use the arrows to turn the whole cube.</Text>
 
       <View style={[styles.dock, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.actions}>
@@ -156,6 +163,24 @@ function CubeTutor() {
           >
             <Text style={styles.secondaryText}>Reset</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.viewPad}>
+          {VIEW_PAD.map((item) => (
+            <Pressable
+              key={item.direction}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+              disabled={!ready}
+              onPress={() => cubeRef.current?.orbit(item.direction)}
+              style={({ pressed }) => [styles.viewButton, (pressed || !ready) && styles.dim]}
+            >
+              <Text style={styles.viewGlyph}>{item.glyph}</Text>
+              <Text style={styles.viewCaption} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {item.caption}
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
         <View style={styles.pad}>
@@ -300,6 +325,35 @@ const styles = StyleSheet.create({
     color: '#f4f6f8',
     fontWeight: '600',
     fontSize: 16,
+  },
+  viewPad: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  viewButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: '#171b24',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+  },
+  viewGlyph: {
+    color: '#f4f6f8',
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  viewCaption: {
+    color: '#9aa3b2',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 1,
+    textAlign: 'center',
   },
   pad: {
     flexDirection: 'row',

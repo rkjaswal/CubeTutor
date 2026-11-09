@@ -3,13 +3,14 @@ import { GLView, type ExpoWebGLRenderingContext } from 'expo-gl';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, Text, View } from 'react-native';
 
-import { CubeScene, type CubeStatus } from '../cube/CubeScene';
+import { CubeScene, type CubeOrbit, type CubeStatus } from '../cube/CubeScene';
 
 export type CubeHandle = {
   scramble: () => void;
   undo: () => void;
   reset: () => void;
   play: (token: string) => void;
+  orbit: (direction: CubeOrbit) => void;
 };
 
 type Props = {
@@ -31,6 +32,7 @@ export const CubeView = forwardRef<CubeHandle, Props>(function CubeView({ onStat
     undo: () => sceneRef.current?.undo(),
     reset: () => sceneRef.current?.reset(),
     play: (token: string) => sceneRef.current?.play(token),
+    orbit: (direction: CubeOrbit) => sceneRef.current?.orbit(direction),
   }), []);
 
   useEffect(() => () => sceneRef.current?.dispose(), []);
